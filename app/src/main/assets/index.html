@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14293f">
+  <title>长方形圆孔绘图</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: #edf3f8; color: #1a3045;
+      font: 16px/1.5 system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+    }
+    .wrap { max-width: 680px; margin: auto; padding: 22px 14px 40px; }
+    h1 { margin: 4px 0 4px; font-size: 25px; }
+    .hint { margin: 0 0 18px; color: #63788b; font-size: 14px; }
+    .card {
+      margin-bottom: 16px; padding: 18px; background: #fff; border-radius: 16px;
+      box-shadow: 0 5px 22px rgba(25, 50, 75, .07);
+    }
+    h2 { margin: 0 0 14px; font-size: 18px; }
+    .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+    label { display: block; font-weight: 600; font-size: 14px; }
+    input, select {
+      display: block; width: 100%; height: 44px; margin-top: 6px; padding: 0 12px;
+      border: 1px solid #cedae4; border-radius: 9px; outline: none;
+      font: inherit; color: #17324a; background: #fff;
+    }
+    input:focus, select:focus {
+      border-color: #2581d6; box-shadow: 0 0 0 3px rgba(37,129,214,.14);
+    }
+    input::placeholder { color: #a2afba; }
+    .note { margin: 14px 0 0; color: #64798b; font-size: 13px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 15px; margin: 0 0 12px; font-size: 14px; }
+    .dot {
+      display: inline-block; width: 13px; height: 13px; margin-right: 5px;
+      border-radius: 50%; vertical-align: -1px;
+    }
+    .gray { background: #fff; border: 2px solid rgba(0,0,0,.3); }
+    .preview {
+      min-height: 280px; display: grid; place-items: center; overflow: hidden;
+      background: #fafcfe; border: 1px solid #e3ebf2; border-radius: 10px;
+    }
+    svg { display: block; width: 100%; height: auto; max-height: 65vh; }
+    .empty { padding: 40px 14px; color: #8494a3; text-align: center; }
+    .status { margin: 12px 0 0; color: #596e81; font-size: 13px; }
+    .dimensions {
+      margin: 12px 0 0; padding: 12px 14px; background: #f1f7fc;
+      border-radius: 9px; color: #17324a; font-size: 15px; font-weight: 600;
+    }
+    .error { color: #bd3942; }
+    .export {
+      display: block; width: 100%; margin-top: 14px; padding: 12px;
+      border: 0; border-radius: 10px; background: #1878ca; color: white;
+      font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer;
+    }
+    .export:disabled { background: #aabac8; cursor: not-allowed; }
+    @media (max-width: 380px) {
+      .fields { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>长方形圆孔绘图</h1>
+    <p class="hint">输入尺寸和小圆间距，图形会自动更新。单位：厘米。</p>
+
+    <section class="card">
+      <h2>尺寸与排列</h2>
+      <div class="fields">
+        <label>① 长方形宽度（厘米）
+          <input id="width" type="number" inputmode="decimal" min="0" step="any" placeholder="例如 60">
+        </label>
+        <label>② 长方形长度（厘米）
+          <input id="length" type="number" inputmode="decimal" min="0" step="any" placeholder="例如 100">
+        </label>
+        <label>③ 黑色小圆中心间距（厘米）
+          <input id="smallSpacing" type="number" inputmode="decimal" min="0" step="any" placeholder="例如 5；留空不画小圆">
+        </label>
+        <label>④ 黑色小圆直径（厘米）
+          <input id="smallDiameter" type="number" inputmode="decimal" min="0" step="any" placeholder="例如 2">
+        </label>
+        <label>⑤ 小圆行数单双数
+          <select id="smallRowParity">
+            <option value="odd">单数行</option>
+            <option value="even">双数行</option>
+          </select>
+        </label>
+        <label>⑥ 小圆列数单双数
+          <select id="columnParity">
+            <option value="odd">单数列</option>
+            <option value="even">双数列</option>
+          </select>
+        </label>
+      </div>
+      <p class="note">小圆横竖中心间距相同，最外圈继续显示。程序在不超出长方形的前提下，按所选单双数决定最多可排的行数和列数。小圆直径留空时默认取长方形短边的 4%；间距留空时不画小圆。</p>
+    </section>
+
+    <section class="card">
+      <h2>绘图预览</h2>
+      <div class="legend">
+        <span><i class="dot gray"></i>30% 黑色空心小圆</span>
+      </div>
+      <div id="preview" class="preview">
+        <div class="empty">请输入长方形的宽度和长度</div>
+      </div>
+      <button id="exportSvg" class="export" type="button" disabled>导出 SVG 文件</button>
+      <p id="status" class="status" aria-live="polite"></p>
+      <p id="dimensions" class="dimensions" hidden></p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const ids = [
+        'width', 'length', 'smallSpacing', 'smallDiameter',
+        'smallRowParity', 'columnParity'
+      ];
+      const inputs = Object.fromEntries(
+        ids.map(id => [id, document.getElementById(id)])
+      );
+      const preview = document.getElementById('preview');
+      const status = document.getElementById('status');
+      const dimensions = document.getElementById('dimensions');
+      const exportSvg = document.getElementById('exportSvg');
+      const NS = 'http://www.w3.org/2000/svg';
+
+      function numberOf(id) {
+        const value = inputs[id].value.trim();
+        return value === '' ? 0 : Number(value);
+      }
+
+      function smallCenters(w, h, diameter, spacing, rowParity, colParity) {
+        if (!spacing) return { points: [], rows: 0, cols: 0 };
+        if (diameter > w || diameter > h) {
+          return { error: '小圆直径超过长方形尺寸。' };
+        }
+
+        const maxCols = Math.floor((w - diameter) / spacing + 1e-9) + 1;
+        const maxRows = Math.floor((h - diameter) / spacing + 1e-9) + 1;
+        const choose = (maximum, parity) => {
+          for (let value = maximum; value >= 1; value--) {
+            if (value % 2 === (parity === 'odd' ? 1 : 0)) return value;
+          }
+          return 0;
+        };
+
+        const cols = choose(maxCols, colParity);
+        const rows = choose(maxRows, rowParity);
+        if (cols < 1 || rows < 1) {
+          return { error: '当前尺寸与间距排不下所选单双数的小圆，请减小间距或直径。' };
+        }
+        if (cols * rows > 3000) {
+          return { error: '当前小圆超过 3000 个，请增大小圆间距。' };
+        }
+
+        const firstX = (w - (cols - 1) * spacing) / 2;
+        const firstY = (h - (rows - 1) * spacing) / 2;
+        const points = [];
+
+        for (let row = 0; row < rows; row++) {
+          for (let col = 0; col < cols; col++) {
+            points.push({
+              x: firstX + col * spacing,
+              y: firstY + row * spacing
+            });
+          }
+        }
+        return { points, rows, cols };
+      }
+
+      function draw() {
+        const w = numberOf('width');
+        const h = numberOf('length');
+        const smallSpacing = numberOf('smallSpacing');
+        const enteredSmallD = numberOf('smallDiameter');
+        const rowParity = inputs.smallRowParity.value;
+        const colParity = inputs.columnParity.value;
+
+        preview.replaceChildren();
+        exportSvg.disabled = true;
+        status.className = 'status';
+        dimensions.hidden = true;
+
+        if
